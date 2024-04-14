@@ -9,6 +9,10 @@ const VandorSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    pincode: {
+        type: Number,
+        requires: true
+    },
     foodType: {
         type: [String],
         required: true
@@ -43,12 +47,18 @@ const VandorSchema = new mongoose.Schema({
     },
     coverImages: {
         type: [String],
-    }
+    },
+    food: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'food'
+        }
+    ]
 }, {
     timestamps: true,
     toJSON: {
         transform: (obj, ret) => {
-            delete ret._v;
+            delete ret.__v;
             delete ret.password;
             delete ret.salt;
             delete ret.createdAt;
