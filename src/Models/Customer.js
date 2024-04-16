@@ -39,7 +39,22 @@ const customerSchema = new mongoose.Schema({
     lng: {
         type: Number,
         required: true
-    }
+    },
+    cart: [
+        {
+            food: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'food'
+            },
+            unit: {
+                type: Number
+            }
+        }
+    ]
+    ,
+    orders: [
+        { type: mongoose.Schema.Types.ObjectId, ref: 'Order' }
+    ]
 }, {
     timestamps: true,
     toJSON: {

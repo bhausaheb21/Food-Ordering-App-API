@@ -1,4 +1,5 @@
-const { Customer } = require("../Models");
+const { default: mongoose } = require("mongoose");
+const { Customer, Food, Order } = require("../Models");
 const { getOtp, sendOTP } = require("../utilities/OTPService");
 const { getSalt, encryptPass, getToken } = require("../utilities/authUtility");
 
@@ -32,7 +33,7 @@ class CustomerController {
                 lastName: "",
                 lat: 0,
                 lng: 0,
-                pincode : 0
+                pincode: 0
             });
 
             const custome = await customer.save();
@@ -160,21 +161,177 @@ class CustomerController {
 
     static async editCustomerProfile(req, res, next) {
         try {
-            const { firstname, lastName, address} = req.body;
+            const { firstname, lastName, address } = req.body;
             const id = req.user.id;
             const profile = await Customer.findById(id);
             profile.address = address;
             profile.firstname = firstname;
             profile.lastName = lastName;
             const updatedprofile = await profile.save()
-            return res.status(201).json({ message: "Updated Sucessfully", profile });
+            return res.status(201).json({ message: "Updated Sucessfully", updatedprofile });
         } catch (error) {
             console.log(error);
             next(error)
         }
-
     }
 
+    //Cart
+    static async addtoCart(req, res, next) {
+        try {
+            const { _id, unit } = req.body;
+            console.log(_id);
+            const food = await Food.findById(_id)
+            console.log(food)
+            if (!food) {
+                const error = new Error("Invalid Dish Selected")
+                error.status = 404;
+                throw error;
+            }
+
+            const id = req.user.id;
+            const profile = await Customer.findById(id);
+
+            if (unit <= 0) {
+                const error = new Error("Invalid amount")
+                error.status = 422;
+                throw error;
+            }
+
+            const cartItems = profile.cart;
+
+            let index = cartItems.findIndex((value) => {
+                return _id.toString() === value.food.toString();
+            })
+            console.log(index);
+            if (index >= 0) {
+                cartItems[index].unit = unit;
+            }
+            else {
+                cartItems.push({ food: _id, unit });
+            }
+
+            profile.cart = cartItems;
+            const updatedProfile = await profile.save();
+            return res.status(201).json({ message: "Added to Cart Successfully", cart: updatedProfile.cart })
+        } catch (error) {
+            next(error)
+        }
+    }
+
+    static async getCart(req, res, next) {
+        try {
+            const id = req.user.id;
+            const profile = await Customer.findById(id).populate('cart.food');
+            console.log(profile.cart);
+            if (!profile) {
+                const error = new Error("Invalid User");
+                error.status = 404;
+                throw error;
+                // return res.status(200).json({ message: "Cart fetched Successfully", cart: profile.cart });
+            }
+            return res.status(200).json({ message: "Cart fetched Successfully", cart: profile.cart });
+        } catch (error) {
+            console.log(error);
+            next(error);
+        }
+    }
+    static async deleteCart(req, res, next) {
+        try {
+            const id = req.user.id;
+            const profile = await Customer.findById(id);
+            if (!profile) {
+                const error = new Error("Invalid User");
+                error.status = 404;
+                throw error;
+            }
+            profile.cart = [];
+            const {cart} = await profile.save();
+            return res.status(200).json({ message: "Cart deleted SUccessfully", cart })
+        } catch (error) {
+            next(error);
+        }
+    }
+    static async createOrder(req, res, next) {
+        try {
+            const id = req.user.id;
+            const cart = req.body;
+            const orderId = `${Math.round(Math.random() * 1000000 + 1000)}`
+            const profile = await Customer.findById(id);
+            if (!profile) {
+                const error = new Error("Customer Invalid");
+                error.status = 422;
+                throw error;
+            }
+            const foodItems = []
+
+            cart.map((value) => {
+                foodItems.push(value._id);
+            })
+
+            const foods = await Food.find().where('_id').in(foodItems).exec();
+            let totalPrice = 0
+            const cartItems = []
+            cart.map((value) => {
+                const food = foods.filter((fd) => fd._id.toString() === value._id.toString());
+                totalPrice += food[0].price * value.unit;
+                cartItems.push({ food: food[0], unit: value.unit })
+            })
+
+            if (cartItems) {
+                const order = new Order({
+                    totalamount: totalPrice,
+                    orderId,
+                    orderDate: new Date(),
+                    items: cartItems,
+                    paidThrough: "CASH",
+                    paymentResponse: "Done",
+                    orderStatus: 'Waiting'
+                })
+
+                profile.orders.push(order);
+                await profile.save();
+                await order.save();
+                return res.status(200).json({ message: "Order Placed Successfully", order });
+            }
+            return res.status(200).json({ message: "No product in cart", })
+        } catch (error) {
+            next(error)
+        }
+    }
+
+    static async getOrders(req, res, next) {
+        try {
+            const id = req.user.id;
+            const profile = await Customer.findById(id).populate('orders');
+            if (!profile) {
+                const error = new Error("Invalid User");
+                error.status = 422;
+                throw error;
+            }
+
+            return res.status(200).json({ message: "Orders Fetched Successfully", orders: profile.orders })
+
+        } catch (error) {
+            next(error)
+        }
+    }
+    static async getOrderbyID(req, res, next) {
+        try {
+            const id = req.user.id;
+            const orderId = req.params.orderid;
+            const profile = await Customer.findById(id)
+            const isOrder = profile.orders.filter((value) => {
+                return value.toString() === orderId.toString();
+            })
+            if (isOrder.length > 0) {
+                const order = await Order.findById(orderId).populate('items.food');
+                return res.status(200).json({ message: "Order Fetched Successfully", order })
+            }
+            return res.status(401).json({ message: "Unauthorized Access" });
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 module.exports = CustomerController
