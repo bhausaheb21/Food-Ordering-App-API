@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
 const OrderSchema = new mongoose.Schema({
+    vandorId: { type: String, required: true },
     orderId: { type: String, required: true },
     items: [{
         food: {
@@ -12,10 +13,16 @@ const OrderSchema = new mongoose.Schema({
         },
     }],
     totalamount: { type: Number },
+    paidamount : {type : Number},
     orderDate: { type: Date },
-    paidThrough: { type: String },
-    paymentResponse: { type: String },
-    orderStatus: { type: String }
+    transaction: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Transaction'
+    },
+    orderStatus: { type: String },
+    remark: String,
+    deleveryId: String,
+    readyTime: Number
 }, {
     toJSON: {
         transform: (myobj, ret) => {

@@ -1,5 +1,5 @@
 const { default: mongoose } = require("mongoose");
-const { Customer, Food, Order } = require("../Models");
+const { Customer, Food, Order, Offer, Transaction } = require("../Models");
 const { getOtp, sendOTP } = require("../utilities/OTPService");
 const { getSalt, encryptPass, getToken } = require("../utilities/authUtility");
 
@@ -170,7 +170,7 @@ class CustomerController {
             const updatedprofile = await profile.save()
             return res.status(201).json({ message: "Updated Sucessfully", updatedprofile });
         } catch (error) {
-            console.log(error);
+            // console.log(error);
             next(error)
         }
     }
@@ -204,15 +204,20 @@ class CustomerController {
             })
             console.log(index);
             if (index >= 0) {
+                let unit1 = cartItems[index].unit;
+                profile.cartPrice -= (unit1 * food.price);
                 cartItems[index].unit = unit;
+                profile.cartPrice += (unit * food.price)
             }
             else {
                 cartItems.push({ food: _id, unit });
+                profile.cartPrice += unit * food.price;
             }
 
             profile.cart = cartItems;
+
             const updatedProfile = await profile.save();
-            return res.status(201).json({ message: "Added to Cart Successfully", cart: updatedProfile.cart })
+            return res.status(201).json({ message: "Added to Cart Successfully", cart: updatedProfile.cart, price: updatedProfile.cartPrice })
         } catch (error) {
             next(error)
         }
@@ -229,7 +234,7 @@ class CustomerController {
                 throw error;
                 // return res.status(200).json({ message: "Cart fetched Successfully", cart: profile.cart });
             }
-            return res.status(200).json({ message: "Cart fetched Successfully", cart: profile.cart });
+            return res.status(200).json({ message: "Cart fetched Successfully", cart: profile.cart, cartAmount: profile.cartPrice });
         } catch (error) {
             console.log(error);
             next(error);
@@ -245,18 +250,38 @@ class CustomerController {
                 throw error;
             }
             profile.cart = [];
-            const {cart} = await profile.save();
+            profile.cartPrice = 0;
+            const { cart } = await profile.save();
             return res.status(200).json({ message: "Cart deleted SUccessfully", cart })
         } catch (error) {
             next(error);
         }
     }
     static async createOrder(req, res, next) {
+        const session = await mongoose.startSession();
+        session.startTransaction();
         try {
-            const id = req.user.id;
-            const cart = req.body;
             const orderId = `${Math.round(Math.random() * 1000000 + 1000)}`
-            const profile = await Customer.findById(id);
+
+            const { transactionId } = req.body;
+            console.log(transactionId);
+
+            const transaction = await Transaction.findById(transactionId).session(session);
+
+            if (!transaction) {
+                const error = new Error("Transaction Required");
+                error.status = 402;
+                throw error;
+            }
+            if (transaction.orderId) {
+                const error = new Error("Invalid Transaction....");
+                error.status = 402;
+                throw error;
+            }
+
+
+            const id = req.user.id;
+            const profile = await Customer.findById(id).session(session);
             if (!profile) {
                 const error = new Error("Customer Invalid");
                 error.status = 422;
@@ -264,17 +289,27 @@ class CustomerController {
             }
             const foodItems = []
 
+            const cart = profile.cart;
+            if (cart.length == 0) {
+                const error = new Error("Cart is Empty.. Please add to Cart");
+                error.status = 422;
+                throw error;
+            }
+
             cart.map((value) => {
-                foodItems.push(value._id);
+                foodItems.push(value.food);
             })
 
-            const foods = await Food.find().where('_id').in(foodItems).exec();
+            const foods = await Food.find().where('_id').in(foodItems).session(session).exec();
             let totalPrice = 0
+            let vandorId;
             const cartItems = []
             cart.map((value) => {
-                const food = foods.filter((fd) => fd._id.toString() === value._id.toString());
-                totalPrice += food[0].price * value.unit;
-                cartItems.push({ food: food[0], unit: value.unit })
+                const fod = foods.filter((fd) => fd._id.toString() === value.food.toString());
+                console.log(fod);
+                vandorId = fod[0].vandorId;
+                totalPrice += fod[0].price * value.unit;
+                cartItems.push({ food: fod[0], unit: value.unit })
             })
 
             if (cartItems) {
@@ -283,19 +318,30 @@ class CustomerController {
                     orderId,
                     orderDate: new Date(),
                     items: cartItems,
-                    paidThrough: "CASH",
-                    paymentResponse: "Done",
-                    orderStatus: 'Waiting'
+                    transaction: transaction.id,
+                    orderStatus: 'Waiting',
+                    deleveryId: "",
+                    paidamount: transaction.orderValue,
+                    vandorId,
                 })
 
                 profile.orders.push(order);
-                await profile.save();
-                await order.save();
+                profile.cart = [];
+                profile.cartPrice = 0;
+                transaction.vendorId = vandorId;
+                transaction.status = "CONFIRMED"
+                await Promise.all([transaction.save(), profile.save(), order.save()]);
+                await session.commitTransaction();
                 return res.status(200).json({ message: "Order Placed Successfully", order });
             }
             return res.status(200).json({ message: "No product in cart", })
         } catch (error) {
+            await session.abortTransaction()
+            console.log(error);
             next(error)
+        }
+        finally {
+            session.endSession()
         }
     }
 
@@ -315,11 +361,17 @@ class CustomerController {
             next(error)
         }
     }
+
     static async getOrderbyID(req, res, next) {
         try {
             const id = req.user.id;
             const orderId = req.params.orderid;
             const profile = await Customer.findById(id)
+            if (!profile) {
+                const error = new Error("Customer Invalid");
+                error.status = 422;
+                throw error;
+            }
             const isOrder = profile.orders.filter((value) => {
                 return value.toString() === orderId.toString();
             })
@@ -330,6 +382,72 @@ class CustomerController {
             return res.status(401).json({ message: "Unauthorized Access" });
         } catch (error) {
             next(error);
+        }
+    }
+
+
+    //Offer Section
+
+    static async verifyOffer(req, res, next) {
+        try {
+            const id = req.user.id;
+            const profile = await Customer.findById(id);
+
+            if (!profile) {
+                const error = new Error("Customer Invalid");
+                error.status = 422;
+                throw error;
+            }
+            const offerId = req.params.offerId;
+            const offer = await Offer.findById(offerId);
+            if (offer && offer.isActive) {
+                return res.status(200).json({ message: "Verification Successful", offer })
+            }
+            return res.status(400).json({ message: "Offer is not Valid" })
+        } catch (error) {
+            next(error)
+        }
+    }
+
+
+    static async createPayment(req, res, next) {
+        try {
+            const id = req.user.id;
+            const profile = await Customer.findById(id);
+            if (!profile) {
+                const error = new Error("Customer Invalid");
+                error.status = 422;
+                throw error;
+            }
+            const { paymentMode, offerId } = req.body;
+            let payableAmount = profile.cartPrice;
+            const transaction = new Transaction({ paymentMode: "COD", paymentResponse: 'Pending', customer: req.user.id, orderValue: payableAmount })
+            if (offerId) {
+                const offer = await Offer.findById(offerId)
+                if (!offer) {
+                    const error = new Error("Not a Valid Offer")
+                    error.status = 400;
+                    throw error;
+                }
+
+                if (!offer.isActive) {
+                    const error = new Error("Offer is Expired")
+                    error.status = 400;
+                    throw error;
+                }
+
+                if (offer.minVal < profile.cartPrice) {
+                    const error = new Error(`Min Order Amount to avail this offer is ${amount}`)
+                    error.status = 400;
+                    throw error;
+                }
+                transaction.orderValue -= offer.offerAmount;
+                transaction.offerId = offer._id;
+            }
+            const finaltransaction = await transaction.save();
+            return res.status(200).json({ message: "Transaction Successful !!", transaction: finaltransaction })
+        } catch (error) {
+            next(error)
         }
     }
 }

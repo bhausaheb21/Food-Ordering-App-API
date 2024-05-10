@@ -1,4 +1,4 @@
-const { Vandor, Food } = require("../Models");
+const { Vandor, Food, Order, Offer } = require("../Models");
 const { encryptPass, getToken } = require("../utilities/authUtility");
 const jwt = require('jsonwebtoken')
 
@@ -28,7 +28,6 @@ class VandorController {
             }
 
             const token = getToken(payload)
-
             return res.status(200).json(token)
 
         }
@@ -62,6 +61,7 @@ class VandorController {
         }
     }
 
+
     static async updateService(req, res, next) {
         try {
             const id = req.user.id;
@@ -78,6 +78,7 @@ class VandorController {
             next(error)
         }
     }
+
 
     static async createFood(req, res, next) {
         try {
@@ -102,6 +103,7 @@ class VandorController {
         }
     }
 
+
     static async getFood() {
         try {
             const food = await Food.find()
@@ -110,6 +112,7 @@ class VandorController {
             next(error)
         }
     }
+
 
     static async addCoverImages(req, res, next) {
         try {
@@ -130,6 +133,183 @@ class VandorController {
         } catch (error) {
             console.log(error);
             next(error)
+        }
+    }
+
+
+    static async getOrders(req, res, next) {
+        try {
+            const vandorId = req.user.id;
+            const profile = await Vandor.findById(vandorId);
+
+            if (!profile) {
+                const error = new Error("Not authenticated");
+                error.status = 200;
+                throw error;
+            }
+            const orders = await Order.find({ vandorId: vandorId });
+            return res.status(200).json({ message: "Orders fetched Successfully", orders })
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+
+    static async getOrderbyId(req, res, next) {
+        try {
+            const vandorId = req.user.id;
+            const profile = await Vandor.findById(vandorId);
+            const { orderId } = req.params;
+
+            if (!profile) {
+                const error = new Error("Not authenticated");
+                error.status = 200;
+                throw error;
+            }
+
+            const order = await Order.findById(orderId).where({ vandorId: vandorId }).populate('items.food');
+
+            return res.status(200).json({ message: "Orders fetched Successfully", order });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+
+    static async processOrder(req, res, next) {
+        try {
+            const { status, remark, readyTime } = req.body;
+            const userId = req.user.id;
+
+            const { orderId } = req.params;
+            const profile = await Vandor.findById(userId);
+            if (!profile) {
+                const error = new Error("Not authenticated");
+                error.status = 200;
+                throw error;
+            }
+
+            const order = await Order.findById(orderId).where({ vandorId: userId });
+            order.orderStatus = status;
+            order.remark = remark;
+            order.readyTime = readyTime;
+            const updatedOrder = await order.save();
+            return res.status(200).json({ message: "Order Changed", updatedOrder });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    static async getOffers(req, res, next) {
+        try {
+            const user = req.user;
+            const vandor = await Vandor.findById(user.id);
+            if (!vandor) {
+                const error = new Error("Not Authenticated to make this request");
+                error.status = 401;
+                throw error;
+            }
+
+            const offers = await Offer.find({ isActive: true }).populate('vendors');
+            if (offers.length > 0) {
+                let availableOffers = [];
+
+                offers.map((item) => {
+                    if (item.vendors.length > 0) {
+                        item.vendors.map((v) => {
+                            if (v._id.toString() === vandor._id.toString())
+                                availableOffers.push(item);
+                        })
+                    }
+
+                    if (item.offertype === 'Generic')
+                        availableOffers.push(item);
+                })
+
+                return res.status(200).json({ message: "Offers fetched Successfully", offers: availableOffers })
+
+            }
+            else
+                return res.status(200).json({ message: "No offers Available" })
+        } catch (error) {
+            next(error)
+        }
+    }
+
+    static async createOffer(req, res, next) {
+        try {
+            const { title, description, offertype, offerAmount, pincode, promocode, promoType, startValidity, endValidity, bank, bins, minVal, isActive } = req.body;
+            const user = req.user;
+            const vandor = await Vandor.findById(user.id);
+            if (!vandor) {
+                const error = new Error("Not Authenticated to make this request");
+                error.status = 401;
+                throw error;
+            }
+
+            const offer = new Offer({ bank, description, bins, isActive, minVal, pincode, promocode, title, vendors: [vandor], offertype, promoType, startValidity, endValidity, offerAmount })
+            const result = await offer.save();
+            return res.status(201).json({
+                message: "Offer Added Successfully !!!",
+                offer: result
+            })
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    static async editOffer(req, res, next) {
+        try {
+            const { title, description, offertype, offerAmount, pincode, promocode, promoType, startValidity, endValidity, bank, bins, minVal, isActive } = req.body;
+            const user = req.user;
+            const offerId = req.params.id;
+
+            const vandor = await Vandor.findById(user.id);
+            if (!vandor) {
+                const error = new Error("Not Authenticated to make this request");
+                error.status = 401;
+                throw error;
+            }
+
+            const offer = await Offer.findById(offerId);
+            let flag = false;
+            offer.vendors.map(item => {
+                if (item.toString() === user.id.toString())
+                    flag = true;
+            })
+
+            if (!flag) {
+                const error = new Error("Not Authenticated to edit this Offer");
+                error.status = 401;
+                throw error;
+            }
+
+            offer.title = title;
+            offer.description = description;
+            offer.offertype = offertype;
+            offer.offerAmount = offerAmount;
+            offer.pincode = pincode;
+            offer.promocode = promocode;
+            offer.promoType = promoType;
+            offer.startValidity = startValidity;
+            offer.endValidity = endValidity;
+            offer.bank = bank;
+            offer.bins = bins;
+            offer.minVal = minVal;
+            offer.isActive = isActive;
+
+            const result = await offer.save();
+
+            return res.status(201).json({
+                message: "Offer Updated Successfully !!!",
+                offer: result
+            })
+
+        } catch (error) {
+            next(error);
         }
     }
 }

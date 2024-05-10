@@ -53,7 +53,9 @@ const VandorSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: 'food'
         }
-    ]
+    ],
+    lat: Number,
+    lng: Number
 }, {
     timestamps: true,
     toJSON: {

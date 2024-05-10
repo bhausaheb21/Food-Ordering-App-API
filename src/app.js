@@ -3,6 +3,7 @@ const { connectDB } = require('./config/db.config')
 const { adminRouter, VandorRouter, ShoppingRouter, CustomerRouter } = require('./Routes')
 const cors = require('cors')
 const path = require('path')
+const { log, error } = require('console')
 
 require('dotenv').config()
 const port = process.env.PORT || 8100
@@ -21,6 +22,7 @@ app.use(ShoppingRouter)
 
 
 app.use((err, req, res, next) => {
+    log(err)
     let status = err.status;
     let message = err.message;
     if (!status) {

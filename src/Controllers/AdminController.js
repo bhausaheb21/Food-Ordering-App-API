@@ -1,4 +1,4 @@
-const { Vandor } = require("../Models");
+const { Vandor, Transaction } = require("../Models");
 const { getSalt, encryptPass } = require("../utilities/authUtility");
 
 
@@ -6,7 +6,7 @@ class AdminController {
     static async createVandor(req, res, next) {
         try {
             const { name, address, foodType, email, password, ownerName, phone, pincode } = req.body;
-            const existingVandor = await Vandor.findOne({ email: email, serviceAvailable : true });
+            const existingVandor = await Vandor.findOne({ email: email, serviceAvailable: true });
             if (existingVandor) {
                 return res.status(409).json({ message: "Vandor already exist" });
             }
@@ -22,7 +22,7 @@ class AdminController {
                 address,
                 foodType, phone,
                 serviceAvailable: true,
-                pincode,
+                pincode,    
                 coverImages: []
             });
 
@@ -37,7 +37,7 @@ class AdminController {
 
     static async getVandors(req, res, next) {
         try {
-            const vandors =await  Vandor.find({ serviceAvailable: true });
+            const vandors = await Vandor.find({ serviceAvailable: true });
             return res.status(200).json({ message: "Fetching Successful", vandors })
         } catch (error) {
             next(error)
@@ -47,11 +47,44 @@ class AdminController {
     static async getVandorsbyId(req, res, next) {
         try {
             const vendorId = req.params.id;
-            const vandor =await  Vandor.findById(vendorId);
+            const vandor = await Vandor.findById(vendorId);
             return res.status(200).json({ message: "Fetching Successful", vandor })
         } catch (error) {
             console.log(error);
             next(error)
+        }
+    }
+
+    static async getTransactions(req, res, next) {
+        try {
+            console.log("Request Received");
+            const transactions = await Transaction.find();
+            return res.status(200).json({
+                message: "Fetched Successfully",
+                transactions
+            })
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+
+    static async getTransactionById(req, res, next) {
+        try {
+            console.log("request for ID");
+            const transaction = await Transaction.findById(req.params.id);
+            if(!transaction){
+                const error = new Error("Transaction not Found");
+                error.status = 404;
+                throw error;
+            }
+            return res.status(200).json({
+                message: "Fetched Successfully",
+                transaction
+            })
+        }
+        catch (err) {
+            next(err)
         }
     }
 

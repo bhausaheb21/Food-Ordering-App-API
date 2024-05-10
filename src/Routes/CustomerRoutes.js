@@ -21,5 +21,10 @@ CustomerRouter.post('/addtoCart', CustomerController.addtoCart)
 CustomerRouter.get('/getCart', CustomerController.getCart)
 CustomerRouter.delete('/deleteCart', CustomerController.deleteCart)
 
+//Create Payment and Verify Offer
+
+CustomerRouter.get('/offer/:offerId/verify', CustomerController.verifyOffer);
+CustomerRouter.post('/create-payment', CustomerController.createPayment)
+
 
 module.exports = CustomerRouter

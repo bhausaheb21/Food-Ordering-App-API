@@ -49,9 +49,13 @@ const customerSchema = new mongoose.Schema({
             unit: {
                 type: Number
             }
+
         }
-    ]
-    ,
+    ],
+    cartPrice: {
+        type: Number,
+        default: 0
+    },
     orders: [
         { type: mongoose.Schema.Types.ObjectId, ref: 'Order' }
     ]
