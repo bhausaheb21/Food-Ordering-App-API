@@ -54,8 +54,10 @@ Welcome to the Food Order App API! This API serves as the backend for a food ord
    npm start
 
 ## 📚 API Endpoints
-For Customers: /api/customers
-For Vendors: /api/vendors
-For Admins: /api/admin
+
+- **For Customers**: `/api/customers`
+- **For Vendors**: `/api/vendors`
+- **For Admins**: `/api/admin`
+
 
 **Happy coding! 🚀**
