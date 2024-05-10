@@ -47,7 +47,7 @@ Welcome to the Food Order App API! This API serves as the backend for a food ord
     SECRET_KEY = <your_secret_key>
     accountSid=<your_twilio_account_sid>
     authToken=<your_twilio_authToken>
-    
+    Phone=<your_twilio_phone_no>
 5. Start the Server
 
    ```bash
