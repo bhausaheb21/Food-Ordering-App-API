@@ -28,12 +28,12 @@ Welcome to the Food Order App API! This API serves as the backend for a food ord
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/yourusername/food-order-app-api.git
+   git clone https://github.com/bhausaheb21/Food-Ordering-App-API
    
 2. Navigate to the project directory:
 
    ```bash
-   cd food-order-app-api
+   cd cd Food-Ordering-App-API
     
 3. Install dependencies:
 
